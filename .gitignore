@@ -220,7 +220,7 @@ __marimo__/
 models/
 .rasa/
 logs/
-data/insurance.db
+data/*.db
 *.db
 
 # Local reference clone (never ship)
