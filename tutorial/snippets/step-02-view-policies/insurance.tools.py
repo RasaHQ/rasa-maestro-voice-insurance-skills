@@ -1,33 +1,22 @@
-"""Shared insurance tools available via import_tools."""
+"""Shared insurance tools (used by 2+ skills or session start).
+
+Single-skill tools live in skills/<name>/tools.py and are auto-discovered.
+"""
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Optional
 
 from rasa.calm_v2.tools.decorator import ToolContext, tool
 from rasa.calm_v2.tools.result import ToolResult
 
-from lib.database import (
-    CLAIM_STATUS_LABELS,
-    Database,
-    adjustor_date_from_claim,
-    get_customer,
-    normalize_incident_date,
-    resolve_customer_id,
-)
-
-
-def _customer_id(context: Optional[ToolContext]) -> str:
-    if context is None:
-        return resolve_customer_id()
-    return resolve_customer_id(context.memory.get("customer_id"))
+from lib.database import Database, customer_id_from_context, get_customer
 
 
 @tool(description="Load the demo customer profile into project memory.")
 async def load_customer_profile(context: ToolContext = None) -> ToolResult:
-    """Ensure customer_id / name fields are available."""
-    customer_id = _customer_id(context)
+    """Ensure customer_id / name fields are available in session.project.*."""
+    customer_id = customer_id_from_context(context)
     db = Database()
     row = get_customer(db, customer_id)
     if not row:
@@ -58,7 +47,8 @@ async def load_customer_profile(context: ToolContext = None) -> ToolResult:
 
 @tool(description="List the customer's insurance policies with premium and coverage limit.")
 async def list_policies(context: ToolContext = None) -> ToolResult:
-    customer_id = _customer_id(context)
+    """List policies for the active customer."""
+    customer_id = customer_id_from_context(context)
     db = Database()
     rows = db.run_query(
         """
@@ -88,5 +78,3 @@ async def list_policies(context: ToolContext = None) -> ToolResult:
             "customer_id": customer_id,
         }
     )
-
-

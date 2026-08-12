@@ -142,11 +142,11 @@ class Report:
 def check_python(report: Report) -> None:
     section("Python environment")
     v = sys.version_info
-    if v.major == 3 and v.minor in (11, 12):
+    if v.major == 3 and 10 <= v.minor <= 13:
         ok(f"Python {v.major}.{v.minor}.{v.micro}")
     else:
         report.error(
-            f"Python {v.major}.{v.minor} detected — this project needs 3.11 or 3.12",
+            f"Python {v.major}.{v.minor} detected — this project needs 3.10–3.13",
             "uv python pin 3.12 && make install",
         )
 
@@ -175,12 +175,13 @@ def check_config_files(report: Report) -> None:
         else:
             ok(".env is present")
 
-    # CALM v1 leftovers poison Maestro projects — fail loudly if present.
-    for legacy in ("config.yml", "domain.yml", "credentials.yml", "endpoints.yml"):
+    # Classic CALM v1 leftovers poison Maestro projects — fail loudly if present.
+    # endpoints.yml is allowed: Maestro still uses it for NLG / model_groups.
+    for legacy in ("config.yml", "domain.yml", "credentials.yml"):
         if (PROJECT_ROOT / legacy).is_file():
             report.error(
                 f"Legacy CALM v1 file present: {legacy}",
-                "Remove it — this project uses agent.yml / integrations.yml only",
+                "Remove it — this project uses agent.yml / integrations.yml (+ optional endpoints.yml)",
             )
 
     try:
@@ -189,7 +190,7 @@ def check_config_files(report: Report) -> None:
         report.error("PyYAML not available", "make install")
         return
 
-    for name in ("agent.yml", "integrations.yml", "memory.yml", "responses.yml"):
+    for name in ("agent.yml", "integrations.yml", "memory.yml", "responses.yml", "endpoints.yml"):
         path = PROJECT_ROOT / name
         if not path.is_file():
             report.error(f"{name} is missing", "Restore it from git: git checkout -- " + name)
@@ -200,6 +201,20 @@ def check_config_files(report: Report) -> None:
         except yaml.YAMLError as exc:
             first_line = str(exc).splitlines()[0]
             report.error(f"{name} is not valid YAML — {first_line}")
+            continue
+
+        if name in ("integrations.yml", "endpoints.yml"):
+            dumped = path.read_text()
+            if re.search(r"^\s*temperature\s*:", dumped, re.MULTILINE):
+                report.error(
+                    f"{name} sets temperature — GPT-5 reasoning models reject a non-default value",
+                    "Remove the temperature key from the OpenAI model config",
+                )
+            if name == "integrations.yml" and "gpt-5.2" not in dumped:
+                report.warning(
+                    f"{name} does not mention gpt-5.2",
+                    "Expected llm.model: gpt-5.2",
+                )
 
 
 def _commented_out_in_env(var: str) -> bool:
@@ -331,15 +346,87 @@ def check_agent_structure(report: Report) -> None:
             names = ", ".join(p.parent.name for p in skill_files)
             ok(f"{len(skill_files)} skills  {DIM}({names}){RESET}")
 
-    tools_path = PROJECT_ROOT / "tools" / "insurance.py"
-    if not tools_path.is_file():
-        report.error("tools/insurance.py is missing")
+    # `@tool.` is not a valid token — it is passed to the model verbatim and breaks turns.
+    offenders = [
+        path.parent.name
+        for path in skill_files
+        if "@tool." in path.read_text()
+    ]
+    if offenders:
+        report.error(
+            f"Invalid @tool. token in skill prose: {', '.join(offenders)}",
+            "Reference tools in plain prose (Call get_claim_status). @ is only for @skill. / @block.",
+        )
     else:
-        tool_count = len(re.findall(r"^@tool\(", tools_path.read_text(), re.MULTILINE))
-        if tool_count:
-            ok(f"tools/insurance.py  {DIM}({tool_count} shared tools){RESET}")
-        else:
-            report.error("tools/insurance.py defines no @tool functions")
+        ok("No @tool. tokens in skill prose")
+
+    if not (PROJECT_ROOT / "skills" / "default_session_start" / "skill.md").is_file():
+        report.error(
+            "skills/default_session_start/skill.md is missing",
+            "Session start must execute_tool load_customer_profile before utter_greet",
+        )
+    else:
+        ok("default_session_start skill present")
+
+    shared_tool_files = sorted(PROJECT_ROOT.glob("tools/*.py"))
+    local_tool_files = sorted(PROJECT_ROOT.glob("skills/*/tools.py"))
+    shared_count = 0
+    local_count = 0
+    zero_arg: list[str] = []
+
+    def _count_tools(path: Path) -> int:
+        return len(re.findall(r"^@tool\(", path.read_text(), re.MULTILINE))
+
+    def _zero_arg_tools(path: Path) -> list[str]:
+        """Heuristic: async def name(...) with no required params besides context."""
+        text = path.read_text()
+        found: list[str] = []
+        for match in re.finditer(
+            r"^async def (\w+)\(([^)]*)\)",
+            text,
+            re.MULTILINE,
+        ):
+            # Only count defs that follow an @tool decorator nearby
+            start = match.start()
+            window = text[max(0, start - 200) : start]
+            if "@tool(" not in window:
+                continue
+            name, params = match.group(1), match.group(2)
+            parts = [p.strip() for p in params.split(",") if p.strip()]
+            required = []
+            for part in parts:
+                if "=" in part:
+                    continue
+                pname = part.split(":")[0].strip()
+                if pname and pname != "context":
+                    required.append(pname)
+            if not required:
+                label = path.name if path.parent.name == "tools" else f"{path.parent.name}/{path.name}"
+                found.append(f"{label}:{name}")
+        return found
+
+    for path in shared_tool_files:
+        if path.name.startswith("_"):
+            continue
+        shared_count += _count_tools(path)
+        zero_arg.extend(_zero_arg_tools(path))
+    for path in local_tool_files:
+        local_count += _count_tools(path)
+        zero_arg.extend(_zero_arg_tools(path))
+
+    if shared_count + local_count == 0:
+        report.error("No @tool functions found under tools/ or skills/*/tools.py")
+    else:
+        ok(
+            f"Tools discovered  {DIM}({shared_count} shared in tools/, "
+            f"{local_count} local in skills/*/tools.py){RESET}"
+        )
+
+    if zero_arg:
+        info(
+            "Zero-arg tools (do not rely on the LLM to call these for setup): "
+            + ", ".join(zero_arg)
+        )
 
     if (PROJECT_ROOT / "lib" / "database.py").is_file():
         ok("lib/database.py  (demo insurance helpers)")

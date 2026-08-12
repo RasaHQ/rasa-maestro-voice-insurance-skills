@@ -9,8 +9,7 @@ This guide is paste-first. Every step points at a complete file under
 
 > The repo already contains the **finished agent**. If anything breaks during
 > the live session, stay calm: run `make inspect` on the finished tree,
-> or recover with the tags documented in [`PRESENTER.md`](PRESENTER.md) and
-> [`TAGS.md`](TAGS.md).
+> or recover with [`PRESENTER.md`](PRESENTER.md) and [`TAGS.md`](TAGS.md).
 
 ---
 
@@ -29,7 +28,7 @@ make env
 | Variable | Purpose |
 |---|---|
 | `RASA_LICENSE` | Rasa Pro Developer Edition license |
-| `OPENAI_API_KEY` | LLM for routing + conversation |
+| `OPENAI_API_KEY` | LLM for routing + conversation (`gpt-5.2`) |
 | `DEEPGRAM_API_KEY` | Speech-to-text **and** text-to-speech |
 
 4. Gate the whole session on one command:
@@ -38,23 +37,21 @@ make env
 make verify
 ```
 
-Do not move on until this prints **all checks passed**. It validates your keys
-(including license expiry), the project structure, the demo insurance data, and
-live connectivity to OpenAI and Deepgram — and names the exact fix for anything
-it finds. Any time something misbehaves later, `make verify` is the first thing
-to run.
+Do not move on until this prints **all checks passed**.
 
 ---
 
 ## Step 0 — Scaffold a voice Skills project (8 min)
 
 **Teach:** Maestro projects are files, not flowcharts. Voice is configured once.
+Session identity is loaded deterministically — not by the LLM.
 
 Key files:
 
 - [`agent.yml`](../agent.yml) — persona (Poly) + voice flags
-- [`integrations.yml`](../integrations.yml) — OpenAI + Inspector with Deepgram ASR/TTS
-- [`.env`](../.env.example) — secrets
+- [`integrations.yml`](../integrations.yml) — OpenAI `gpt-5.2` + Deepgram (no temperature)
+- [`endpoints.yml`](../endpoints.yml) — NLG rephraser model group (no temperature)
+- [`skills/default_session_start/`](../skills/default_session_start/) — `execute_tool` then greet
 
 Paste set: [`snippets/step-00-scaffold/`](snippets/step-00-scaffold/)
 
@@ -63,9 +60,13 @@ make train
 make inspect
 ```
 
-**Verify:** Inspector opens. Toggle the mic (or type) and say hello. Poly should greet you.
+**Verify:** Inspector opens and Poly greets Serena without you asking it to load a profile.
 
-**Talking point:** Inspector defaults to Deepgram for both listening and speaking when `DEEPGRAM_API_KEY` is set.
+**Talking points:**
+
+- Scaffold with `rasa init --engine maestro` (there is no `--template voice`)
+- Zero-arg tools must not be left to the first LLM turn
+- Deepgram Flux (ASR) + Aura (TTS) under `channels.inspector`
 
 ---
 
@@ -75,16 +76,6 @@ make inspect
 
 Paste set: [`snippets/step-01-faq/`](snippets/step-01-faq/)
 
-Copy into:
-
-- `skills/insurance_faq/skill.md`
-- `skills/insurance_faq/references/universal_insurance_faq.md`
-
-```bash
-make train
-make inspect
-```
-
 Try: “Does my homeowners policy cover flood damage?”
 
 **Verify:** Answer comes from FAQ references, short enough to speak aloud.
@@ -93,26 +84,20 @@ Try: “Does my homeowners policy cover flood damage?”
 
 ## Step 2 — First tool: view policies (10 min)
 
-**Teach:** Tools are Python functions with `@tool`. They are auto-discovered from
-`tools/` (shared) or `skills/<name>/tools.py`.
+**Teach:** Local-first tools. Shared tools live in `tools/`; a tool used by only
+one skill should live in `skills/<name>/tools.py` (auto-discovered).
 
 Paste set: [`snippets/step-02-view-policies/`](snippets/step-02-view-policies/)
 
-Copy:
-
-- `skill.md` → `skills/view_policies/skill.md`
-- `insurance.tools.py` → `tools/insurance.py`
-- `database.py` → `lib/database.py`
-- also ensure `data/source/*.json` seed files are present
+Reference tools in **plain prose** (`Call list_policies`). There is **no**
+`@tool.` token — `@` is only for `@skill.` / `@block.`.
 
 Try: “What policies do I have?”
 
-**Verify:** Agent lists Serena’s Car and Homeowner policies with premium and limit.
+**Verify:** Agent lists Serena’s Car and Homeowner policies.
 
 Demo customer: **Serena Williams** (id `123`)  
-Useful policy: Car `009738813`, Homeowner `009738812`
-
-Run `make show-demo-data` any time for policies, claims, and ready-made phrases.
+Run `make show-demo-data` for claim IDs and ready-made phrases.
 
 ---
 
@@ -120,21 +105,20 @@ Run `make show-demo-data` any time for policies, claims, and ready-made phrases.
 
 **Teach:** Progressive control. Soft instructions become runtime guarantees.
 
-In `skills/check_claim_status/skill.md`, `check_claim_status` is invisible until
-`session.check_claim_status.claim_number` exists:
+The lookup tool is named `get_claim_status` (not `check_claim_status`) so it
+does not collide with the skill id.
 
 ```yaml
 tool_constraints:
-  - check_claim_status:
+  - get_claim_status:
       requires: session.check_claim_status.claim_number
 ```
 
 Paste set: [`snippets/step-03-tool-constraints/`](snippets/step-03-tool-constraints/)
 
-**Verify:** Without a claim number, the model cannot call the lookup tool
-(it is removed from the schema).
-
 Try: “Check claim CLAIM1236”
+
+**Verify:** Without a claim number, the model cannot call the lookup tool.
 
 ---
 
@@ -149,10 +133,13 @@ Try: “Check claim CLAIM1236”
 
 Paste set: [`snippets/step-04-file-claim/`](snippets/step-04-file-claim/)
 
-Try (voice if possible): “I need to file a claim on my car.”
+Local tools: `normalize_incident_date_value`, `submit_claim` in
+`skills/file_claim/tools.py`. Shared `list_policies` via `import_tools`.
 
-**Verify:** Recording notice plays, auto-only fields are collected, confirmation
-is required before submit, claim number `12345` is returned.
+Try: “I need to file a claim on my car.”
+
+**Verify:** Recording notice, auto-only fields, confirmation before submit,
+claim number `12345`.
 
 ---
 
@@ -162,26 +149,20 @@ is required before submit, claim number `12345` is returned.
 
 Paste set: [`snippets/step-05-composition/`](snippets/step-05-composition/)
 
-Try: “What’s the status of CLAIM1236?” then agree to schedule an inspection.
+Inspection tool is renamed `book_inspection` to avoid colliding with the skill.
 
-**Verify:** Status skill delegates to `schedule_inspection` when status is `2`.
+Try: “What’s the status of CLAIM1236?” then agree to schedule an inspection.
 
 ---
 
 ## Step 6 — Remaining insurance skills (fast-forward) (8 min)
 
-For live timing, copy the finished folders rather than rebuilding:
-
-- `skills/human_handoff`
-- `skills/goodbye`
-- `skills/leave_feedback`
-- `skills/intro`
-- `skills/view_policies` (if not already pasted)
+Paste set: [`snippets/step-06-remaining/`](snippets/step-06-remaining/)
 
 Or reset to the finished tree:
 
 ```bash
-git checkout main -- skills tools lib
+git checkout HEAD -- skills tools lib
 make train
 ```
 
@@ -191,8 +172,6 @@ make train
 
 ## Step 7 — Voice pass with Deepgram (10 min)
 
-Keep Inspector open with the mic enabled.
-
 Suggested spoken script:
 
 1. “Hi Poly”
@@ -201,28 +180,29 @@ Suggested spoken script:
 4. “I need to file a claim”
 5. “Thanks, that’s all”
 
+**Fallback:** If Zoom steals the mic, switch Inspector to text mode.
+
 ---
 
 ## Step 8 — Flywheel close (5 min)
 
-1. Deliberately break a happy path (skip confirmation wording, change claim details mid-flow)
+1. Break a happy path (skip confirmation, change claim details mid-flow)
 2. Add one tighter constraint or confirmation utterance
 3. Retrain + re-inspect
-
-**Teach:** Conversation-driven development beats guessing at instructions alone.
 
 ---
 
 ## What you built
 
-| Capability | Skill |
+| Capability | Skill / tool |
 |---|---|
-| Greeting / orientation | `intro` + session greeting |
-| Policy lookup | `view_policies` |
-| Claim status | `check_claim_status` |
-| Inspection scheduling | `schedule_inspection` (+ composition) |
-| File a claim | `file_claim` |
+| Session identity | `default_session_start` + `load_customer_profile` |
+| Policy lookup | `view_policies` / `list_policies` |
+| Claim status | `check_claim_status` / `get_claim_status` |
+| Inspection | `schedule_inspection` / `book_inspection` |
+| File a claim | `file_claim` / `submit_claim` |
 | FAQ | `insurance_faq` |
-| Human handoff | `human_handoff` |
-| Goodbye + feedback | `goodbye`, `leave_feedback` |
+| Handoff / goodbye | `human_handoff`, `goodbye`, `leave_feedback` |
 | Voice | Deepgram ASR + TTS via Inspector |
+
+Next: [`PRESENTER.md`](PRESENTER.md) for timing and escape hatches.

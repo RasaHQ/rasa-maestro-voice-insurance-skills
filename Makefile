@@ -156,7 +156,7 @@ tutorial: ## Show the live-session chapters and where the snippets live
 	@echo '  tutorial/TAGS.md        Checkpoint tags for live recovery'
 	@echo ''
 	@echo '$(YELLOW)Chapters (paste-ready files per step):$(RESET)'
-	@echo '  $(GREEN)0$(RESET)  Scaffold a voice Skills project   tutorial/snippets/step-00-scaffold/'
+	@echo '  $(GREEN)0$(RESET)  Scaffold + session start           tutorial/snippets/step-00-scaffold/'
 	@echo '  $(GREEN)1$(RESET)  First skill: FAQ in prose         tutorial/snippets/step-01-faq/'
 	@echo '  $(GREEN)2$(RESET)  First tool: view policies         tutorial/snippets/step-02-view-policies/'
 	@echo '  $(GREEN)3$(RESET)  First guarantee: constraints      tutorial/snippets/step-03-tool-constraints/'

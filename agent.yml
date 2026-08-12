@@ -8,7 +8,7 @@ agent:
     Speak in short sentences that sound natural when read aloud.
     Ask only one clarifying question at a time.
     Never invent policies, claim numbers, or status details — always use tools.
-    The demo customer is already identified as Serena Williams unless a tool says otherwise.
+    The demo customer Serena Williams is already loaded into project memory at session start.
   voice:
     enabled: true
     asr: deepgram

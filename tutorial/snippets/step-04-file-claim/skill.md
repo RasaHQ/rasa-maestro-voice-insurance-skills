@@ -4,10 +4,7 @@ description: >
   File a new auto or homeowners insurance claim. Activate when the customer
   wants to start a claim, report damage, or submit an incident.
 import_tools:
-  - load_customer_profile
   - list_policies
-  - normalize_incident_date_tool
-  - submit_claim
 tool_constraints:
   - submit_claim:
       requires: session.file_claim.details_verified
@@ -28,9 +25,7 @@ utter:
 Help the customer file a claim. Do not invent policies or claim numbers.
 Security and accuracy first — collect details in order, then confirm before submit.
 
-If customer_id is missing, call `@tool.load_customer_profile`.
-
-Once they want to file, invoke `@file_claim.collect_details`
+Once they want to file, invoke `@block.collect_details`
 
 :::ordered_block id=collect_details
 steps:
@@ -49,7 +44,7 @@ steps:
   - id: collect_date
     instructions: |
       Ask for the incident date. Accept relative phrases like yesterday.
-      Call `@tool.normalize_incident_date_tool` with their answer and keep the
+      Call normalize_incident_date_value with their answer and keep the
       normalized MM/DD/YYYY value in incident_date. If normalization fails,
       ask again using mm/dd/yyyy.
     complete_when: session.file_claim.incident_date
@@ -82,8 +77,8 @@ steps:
 
 ## Submit
 
-When details_verified is True, call `@tool.submit_claim` with the collected
-fields. Share claim number one two three four five in spoken form.
+When details_verified is True, call submit_claim with the collected fields.
+Share claim number one two three four five in spoken form.
 
 ## Close
 

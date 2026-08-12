@@ -2,16 +2,16 @@
 
 llm:
   provider: openai
-  model: gpt-4.1-mini
+  model: gpt-5.2
   api_key_env: OPENAI_API_KEY
-  temperature: 0.0
+  # Do not set temperature — GPT-5 reasoning models reject a non-default value.
 
 channels:
   rest:
     enabled: true
   inspector:
     enabled: true
-    # Deepgram end-to-end: speech-to-text (ASR) and text-to-speech (TTS)
+    # Deepgram end-to-end: speech-to-text (ASR / Flux) and text-to-speech (TTS / Aura)
     asr:
       name: deepgram
       language_map:

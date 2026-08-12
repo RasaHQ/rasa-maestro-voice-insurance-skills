@@ -3,24 +3,19 @@ name: Check Claim Status
 description: >
   Look up the status of an existing insurance claim by claim number. Activate
   when the customer asks about claim status, claim progress, or an open claim.
-import_tools:
-  - load_customer_profile
-  - check_claim_status
 tool_constraints:
-  - check_claim_status:
+  - get_claim_status:
       requires: session.check_claim_status.claim_number
 ---
 
 Help the customer check a claim status. Do not invent claim numbers or statuses.
-
-If customer_id is missing, call `@tool.load_customer_profile`.
 
 if: not session.check_claim_status.claim_number
 Ask for the claim number. When they provide it, set `claim_number` via
 `set_fields`. Demo claim numbers include CLAIM1234 through CLAIM1238.
 
 if: session.check_claim_status.claim_number
-Call `@tool.check_claim_status` with that claim number.
+Call get_claim_status with that claim number.
 
 if: session.check_claim_status.claim_status == "0"
 Explain that an adjustor is being assigned. Mention the expected assignment

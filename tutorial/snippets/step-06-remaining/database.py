@@ -17,6 +17,31 @@ DATE_FORMAT = "%m/%d/%Y"
 
 logger = logging.getLogger(__name__)
 
+
+def find_project_root() -> Path:
+    """Locate the workspace root that contains ``data/source`` seed fixtures.
+
+    At runtime, ``lib/database.py`` may be imported from the extracted model
+    snapshot (which does not include ``data/source``). Prefer the process cwd
+    and walk parents so tools still seed against the live workspace.
+    """
+    candidates: list[Path] = []
+    cwd = Path.cwd().resolve()
+    candidates.append(cwd)
+    candidates.extend(cwd.parents)
+    here = Path(__file__).resolve().parent.parent
+    candidates.append(here)
+    candidates.extend(here.parents)
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if (candidate / "data" / "source").is_dir():
+            return candidate
+    return cwd
+
 _DEFAULTS = (datetime(1900, 1, 1), datetime(2001, 2, 3))
 _WEEKDAYS = {
     "monday": 0,
@@ -100,7 +125,7 @@ class Database:
     }
 
     def __init__(self, database_path: Optional[Path] = None) -> None:
-        self.project_root_path = Path(__file__).resolve().parent.parent
+        self.project_root_path = find_project_root()
         self.database_path = database_path or (
             self.project_root_path / "data" / "insurance.db"
         )
@@ -163,6 +188,16 @@ def resolve_customer_id(context_customer_id: Optional[str] = None) -> str:
     if context_customer_id and str(context_customer_id).strip():
         return str(context_customer_id).strip()
     return DEMO_CUSTOMER_ID
+
+
+def customer_id_from_context(context: Any = None) -> str:
+    """Resolve the active customer id from tool context with a safe demo fallback."""
+    if context is None:
+        return DEMO_CUSTOMER_ID
+    try:
+        return resolve_customer_id(context.memory.get("customer_id"))
+    except Exception:
+        return DEMO_CUSTOMER_ID
 
 
 def get_customer(
