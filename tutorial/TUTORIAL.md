@@ -8,8 +8,7 @@ This guide is paste-first. Every step points at a complete file under
 [`tutorial/snippets/`](snippets/). Prefer copying files over typing.
 
 > The repo already contains the **finished agent**. If anything breaks during
-> the live session, stay calm: run `make inspect` on the finished tree,
-> or recover with [`PRESENTER.md`](PRESENTER.md) and [`TAGS.md`](TAGS.md).
+> the live session, stay calm: run `make inspect` on the finished tree.
 
 ---
 
@@ -204,5 +203,3 @@ Suggested spoken script:
 | FAQ | `insurance_faq` |
 | Handoff / goodbye | `human_handoff`, `goodbye`, `leave_feedback` |
 | Voice | Deepgram ASR + TTS via Inspector |
-
-Next: [`PRESENTER.md`](PRESENTER.md) for timing and escape hatches.
