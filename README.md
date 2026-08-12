@@ -119,8 +119,7 @@ Reset the SQLite demo DB with `make reset-db`.
 
 ## Build-with-me tutorial
 
-See [`tutorial/TUTORIAL.md`](tutorial/TUTORIAL.md). Presenters:
-[`tutorial/PRESENTER.md`](tutorial/PRESENTER.md) and [`tutorial/TAGS.md`](tutorial/TAGS.md).
+See [`tutorial/TUTORIAL.md`](tutorial/TUTORIAL.md) and [`tutorial/TAGS.md`](tutorial/TAGS.md).
 
 ```bash
 make tutorial
